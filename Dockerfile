@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
-FROM node:20-alpine AS base
+FROM node:20-slim AS base
 
 # Install dependencies only when needed
 FROM base AS deps
-RUN apk add --no-cache libc6-compat openssl
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
