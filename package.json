@@ -12,7 +12,9 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "mcp": "tsx app/lib/mcp-server.ts"
+    "mcp": "tsx app/lib/mcp-server.ts",
+    "mcp:http": "tsx app/lib/mcp-http-server.ts",
+    "mcp:streamable": "tsx app/lib/mcp-streamable-server.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

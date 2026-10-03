@@ -1,0 +1,18 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm ci --production
+
+# Copy prisma schema for generation
+COPY prisma ./prisma
+RUN npx prisma generate
+
+# Copy MCP server
+COPY app/lib/mcp-streamable-server.ts ./app/lib/
+
+EXPOSE 3001
+
+CMD ["npx", "tsx", "app/lib/mcp-streamable-server.ts"]
