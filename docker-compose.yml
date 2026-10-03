@@ -7,8 +7,8 @@ services:
       dockerfile: Dockerfile
     container_name: coffee-tracker
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
       - NODE_ENV=production
       - DATABASE_URL=file:./data/prod.db
@@ -22,6 +22,12 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.coffee-app.rule=Host(`${APP_DOMAIN}`)"
+      - "traefik.http.routers.coffee-app.entrypoints=websecure"
+      - "traefik.http.routers.coffee-app.tls.certresolver=letsencrypt"
+      - "traefik.http.services.coffee-app.loadbalancer.server.port=3000"
 
   mcp:
     build:
@@ -29,8 +35,8 @@ services:
       dockerfile: Dockerfile.mcp
     container_name: coffee-tracker-mcp
     restart: unless-stopped
-    ports:
-      - "3001:3001"
+    expose:
+      - "3001"
     environment:
       - NODE_ENV=production
       - DATABASE_URL=file:./data/prod.db
@@ -44,6 +50,12 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.coffee-mcp.rule=Host(`${MCP_DOMAIN}`)"
+      - "traefik.http.routers.coffee-mcp.entrypoints=websecure"
+      - "traefik.http.routers.coffee-mcp.tls.certresolver=letsencrypt"
+      - "traefik.http.services.coffee-mcp.loadbalancer.server.port=3001"
 
 volumes:
   coffee-data:
