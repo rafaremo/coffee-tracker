@@ -2,7 +2,6 @@ import type { ActionFunctionArgs, MetaFunction } from "@remix-run/node";
 import { redirect } from "@remix-run/node";
 import { Form, Link } from "@remix-run/react";
 import { ArrowLeft, Save } from "lucide-react";
-import PhotoUploader from "~/components/PhotoUploader";
 import { createCoffee } from "~/lib/coffee.server";
 import { requireAuth } from "~/lib/session.server";
 import PhotoUploader from "~/components/PhotoUploader";
@@ -19,6 +18,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const parsed: Record<string, unknown> = {
     userId: session.user.id,
     name: String(data.name),
+    photoPath: data.photoPath ? String(data.photoPath) : null,
     brand: data.brand ? String(data.brand) : null,
     isFavorite: data.isFavorite === "true",
     tags: data.tags ? String(data.tags) : null,

@@ -3,7 +3,7 @@ import { Heart, Coffee, Globe, Leaf, FlaskConical, Flame } from "lucide-react";
 import type { CoffeeEntry } from "@prisma/client";
 
 interface Props {
-  coffee: CoffeeEntry;
+  coffee: Omit<CoffeeEntry, "createdAt" | "updatedAt">;
 }
 
 export default function CoffeeCard({ coffee }: Props) {

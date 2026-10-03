@@ -16,15 +16,13 @@ export async function action({ request }: ActionFunctionArgs) {
   try {
     const result = await auth.api.signInEmail({
       body: { email, password },
-      asResponse: false,
+      headers: request.headers,
+      asResponse: true,
     });
 
-    if (result.token) {
+    if (result.ok) {
       const headers = new Headers();
-      headers.append(
-        "Set-Cookie",
-        `better-auth.session_token=${result.token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`
-      );
+      for (const cookie of result.headers.getSetCookie()) headers.append("Set-Cookie", cookie);
       return redirect("/", { headers });
     }
   } catch (err) {

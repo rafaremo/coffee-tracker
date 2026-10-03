@@ -14,3 +14,10 @@ coverage
 *.swo
 *~
 .data
+
+build
+data
+**/*.db
+**/*.db-*
+public/uploads
+.env.*

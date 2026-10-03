@@ -1,4 +1,5 @@
 #!/usr/bin/env tsx
+import type { Prisma } from "@prisma/client";
 import { PrismaClient } from "@prisma/client";
 import * as readline from "readline";
 
@@ -127,16 +128,20 @@ function coffeeToDict(coffee: Record<string, unknown>) {
   };
 }
 
+function sendToolResult(id: unknown, result: unknown) {
+  sendResult(id, { content: [{ type: "text", text: JSON.stringify(result) }] });
+}
+
 async function handleToolCall(id: unknown, name: string, args: Record<string, unknown>) {
   try {
     switch (name) {
       case "list_coffees": {
-        const where: Record<string, unknown> = {};
+        const where: Prisma.CoffeeEntryWhereInput = {};
         if (args.favoriteOnly) where.isFavorite = true;
         if (args.search) {
           where.OR = [
-            { name: { contains: args.search as string, mode: "insensitive" } },
-            { brand: { contains: args.search as string, mode: "insensitive" } },
+            { name: { contains: args.search as string } },
+            { brand: { contains: args.search as string } },
           ];
         }
         const items = await prisma.coffeeEntry.findMany({
@@ -146,7 +151,7 @@ async function handleToolCall(id: unknown, name: string, args: Record<string, un
           take: (args.limit as number) || 20,
         });
         const total = await prisma.coffeeEntry.count({ where });
-        sendResult(id, { total, coffees: items.map(coffeeToDict) });
+        sendToolResult(id, { total, coffees: items.map(coffeeToDict) });
         break;
       }
       case "get_coffee": {
@@ -154,24 +159,24 @@ async function handleToolCall(id: unknown, name: string, args: Record<string, un
         if (!coffee) {
           sendError(id, -32602, `Coffee ${args.id} not found`);
         } else {
-          sendResult(id, { coffee: coffeeToDict(coffee) });
+          sendToolResult(id, { coffee: coffeeToDict(coffee) });
         }
         break;
       }
       case "add_coffee": {
         const coffee = await prisma.coffeeEntry.create({ data: args as never });
-        sendResult(id, { coffee: coffeeToDict(coffee), message: `Added coffee: ${coffee.name}` });
+        sendToolResult(id, { coffee: coffeeToDict(coffee), message: `Added coffee: ${coffee.name}` });
         break;
       }
       case "update_coffee": {
         const { id: cid, ...data } = args;
         const coffee = await prisma.coffeeEntry.update({ where: { id: cid as number }, data: data as never });
-        sendResult(id, { coffee: coffeeToDict(coffee), message: `Updated coffee: ${coffee.name}` });
+        sendToolResult(id, { coffee: coffeeToDict(coffee), message: `Updated coffee: ${coffee.name}` });
         break;
       }
       case "delete_coffee": {
         await prisma.coffeeEntry.delete({ where: { id: args.id as number } });
-        sendResult(id, { message: `Deleted coffee ${args.id}` });
+        sendToolResult(id, { message: `Deleted coffee ${args.id}` });
         break;
       }
       case "get_stats": {
@@ -179,11 +184,11 @@ async function handleToolCall(id: unknown, name: string, args: Record<string, un
         const favorites = await prisma.coffeeEntry.count({ where: { isFavorite: true } });
         const avgRating = await prisma.coffeeEntry.aggregate({ _avg: { myRating: true } });
         const avgSca = await prisma.coffeeEntry.aggregate({ _avg: { scaScore: true } });
-        sendResult(id, {
+        sendToolResult(id, {
           totalEntries: total,
           totalFavorites: favorites,
-          avgRating: avgRating._avg.myRating ? Math.round(avgRating._avg.myRating * 100) / 100 : null,
-          avgScaScore: avgSca._avg.scaScore ? Math.round(avgSca._avg.scaScore * 100) / 100 : null,
+          avgRating: avgRating._avg.myRating != null ? Math.round(avgRating._avg.myRating * 100) / 100 : null,
+          avgScaScore: avgSca._avg.scaScore != null ? Math.round(avgSca._avg.scaScore * 100) / 100 : null,
         });
         break;
       }
@@ -193,7 +198,7 @@ async function handleToolCall(id: unknown, name: string, args: Record<string, un
           orderBy: { createdAt: "desc" },
           take: (args.limit as number) || 10,
         });
-        sendResult(id, { total: items.length, coffees: items.map(coffeeToDict) });
+        sendToolResult(id, { total: items.length, coffees: items.map(coffeeToDict) });
         break;
       }
       default:
@@ -223,7 +228,7 @@ rl.on("line", async (line) => {
   if (method === "initialize") {
     sendResult(id, {
       protocolVersion: "2024-11-05",
-      capabilities: {},
+      capabilities: { tools: {} },
       serverInfo: { name: "coffee-tracker-mcp", version: "1.0.0" },
     });
   } else if (method === "tools/list") {

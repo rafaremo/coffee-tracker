@@ -1,4 +1,4 @@
-FROM node:20-slim
+FROM node:22-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
@@ -16,8 +16,12 @@ RUN npx prisma generate
 COPY app/lib/mcp-streamable-server.ts ./app/lib/
 
 # Create data directory
-RUN mkdir -p /app/data
+ENV DATABASE_URL=file:/app/data/prod.db
+ENV NODE_ENV=production
+RUN groupadd --gid 1001 nodejs && useradd --uid 1001 --gid nodejs mcp
+RUN mkdir -p /app/data && chown mcp:nodejs /app/data
+USER mcp
 
 EXPOSE 3001
 
-CMD ["npx", "tsx", "app/lib/mcp-streamable-server.ts"]
+CMD ["./node_modules/.bin/tsx", "app/lib/mcp-streamable-server.ts"]

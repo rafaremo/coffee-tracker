@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:20-slim AS base
+FROM node:22-bookworm-slim AS base
 
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
@@ -23,17 +23,19 @@ FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV DATABASE_URL=file:./data/prod.db
+ENV DATABASE_URL=file:/app/data/prod.db
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 remix
 
-RUN mkdir -p /app/data && chown remix:nodejs /app/data
+RUN mkdir -p /app/data/uploads && chown -R remix:nodejs /app/data
 
 COPY --from=builder --chown=remix:nodejs /app/build ./build
 COPY --from=builder --chown=remix:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=remix:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=remix:nodejs /app/node_modules ./node_modules
+
+RUN ln -s /app/data/uploads /app/build/client/uploads
 
 USER remix
 
@@ -42,4 +44,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD npx prisma migrate deploy && npx prisma db seed && npm start
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && exec ./node_modules/.bin/remix-serve ./build/server/index.js"]

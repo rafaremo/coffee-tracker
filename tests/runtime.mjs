@@ -1,0 +1,67 @@
+import assert from 'node:assert/strict';
+
+const app = process.env.TEST_APP_URL || 'http://127.0.0.1:3000';
+const mcp = process.env.TEST_MCP_URL || 'http://mcp:3001';
+const token = process.env.MCP_TOKEN;
+const suffix = Date.now();
+const request = (path, options = {}) => fetch(`${app}${path}`, { redirect: 'manual', ...options });
+const form = (values, cookie) => ({ method: 'POST', headers: cookie ? { cookie } : {}, body: new URLSearchParams(values) });
+const cookies = response => response.headers.getSetCookie().map(c => c.split(';')[0]).join('; ');
+async function rpc(name, args = {}) {
+  const response = await fetch(`${mcp}/mcp`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) });
+  const result = await response.json();
+  assert.equal(result.error, undefined, JSON.stringify(result));
+  assert.equal(result.result.content[0].type, "text");
+  return JSON.parse(result.result.content[0].text);
+}
+assert.equal((await request('/health')).status, 200);
+const email = `test-${suffix}@example.com`;
+const password = 'runtime-test-password-123';
+let response = await request('/register', form({ name: 'Runtime test', email, password }));
+assert.equal(response.status, 302, await response.text());
+const cookie = cookies(response);
+assert.ok(cookie.includes('session_token'));
+assert.equal((await request('/coffees', { headers: { cookie } })).status, 200);
+response = await request('/coffees/new', form({ name: `Ethiopia ${suffix}`, myRating: '0' }, cookie));
+assert.equal(response.status, 302, await response.text());
+const location = response.headers.get('location');
+const id = Number(location.split('/').pop());
+response = await request('/coffees?search=ethiopia', { headers: { cookie } });
+assert.equal(response.status, 200);
+assert.ok((await response.text()).includes(`Ethiopia ${suffix}`));
+response = await request('/register', form({ name: 'Other user', email: `other-${suffix}@example.com`, password }));
+const otherCookie = cookies(response);
+for (const path of [location, `${location}/edit`]) {
+  assert.equal((await request(path, { headers: { cookie: otherCookie } })).status, 404);
+  assert.equal((await request(path, form({ intent: 'delete', name: 'Stolen' }, otherCookie))).status, 404);
+}
+assert.equal((await request('/api/upload', { method: 'POST' })).status, 401);
+const upload = new FormData();
+upload.set('photo', new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jB9kAAAAASUVORK5CYII=', 'base64')], { type: 'image/png' }), 'photo.png');
+response = await request('/api/upload', { method: 'POST', headers: { cookie }, body: upload });
+assert.equal(response.status, 200);
+const { photoPath } = await response.json();
+assert.equal((await request(photoPath)).status, 200);
+assert.equal((await request(`${location}/edit`, form({ name: `Ethiopia ${suffix}`, photoPath }, cookie))).status, 302);
+assert.ok((await (await request(location, { headers: { cookie } })).text()).includes(photoPath));
+response = await request('/logout', form({}, cookie));
+assert.equal(response.status, 302);
+assert.equal((await request(location, { headers: { cookie } })).status, 401);
+response = await request('/login', form({ email, password }));
+assert.equal(response.status, 302);
+const signedIn = cookies(response);
+assert.equal((await request(location, { headers: { cookie: signedIn } })).status, 200);
+assert.equal((await fetch(`${mcp}/health`)).status, 200);
+assert.equal((await fetch(`${mcp}/mcp`, { method: 'POST' })).status, 401);
+response = await fetch(`${mcp}/mcp`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 0, method: 'initialize' }) });
+assert.equal(response.status, 200);
+assert.ok(response.headers.get('mcp-session-id'));
+assert.ok((await response.json()).result);
+assert.ok((await rpc('list_coffees', { search: `ethiopia ${suffix}` })).coffees.some(c => c.id === id));
+const added = await rpc('add_coffee', { name: `MCP ${suffix}`, myRating: 0 });
+await rpc('update_coffee', { id: added.coffee.id, isFavorite: true });
+assert.equal((await rpc('get_coffee', { id: added.coffee.id })).coffee.isFavorite, true);
+await rpc('get_stats');
+await rpc('get_favorites');
+await rpc('delete_coffee', { id: added.coffee.id });
+console.log(JSON.stringify({ status: 'passed', id, photoPath, checks: 'registration, login/logout, ownership, web/MCP search and CRUD, uploads, health, MCP initialization' }));

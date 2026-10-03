@@ -2,7 +2,7 @@
 
 Track your specialty coffee journey with a beautiful web dashboard, full authentication, photo uploads, and MCP server for AI agents.
 
-Built with **Remix 3**, **Prisma**, **SQLite**, **Tailwind CSS**, **Chart.js**, and **Better Auth**.
+Built with **Remix 2**, **Prisma**, **SQLite**, **Tailwind CSS**, **Chart.js**, and **Better Auth**.
 
 ## Features
 
@@ -22,10 +22,12 @@ Built with **Remix 3**, **Prisma**, **SQLite**, **Tailwind CSS**, **Chart.js**, 
 
 ```bash
 # Install dependencies
-npm install
+npm ci
+cp .env.example .env
 
 # Set up database
-npx prisma migrate dev --name init
+npx prisma migrate deploy
+# Optional demo records (not attached to a user):
 npx prisma db seed
 
 # Start dev server
@@ -108,7 +110,7 @@ All fields are optional:
 ```bash
 # Build and run with docker-compose
 # This starts both the web app (port 3000) and MCP server (port 3001)
-docker-compose up -d
+docker compose up -d --build
 ```
 
 Or deploy directly to Coolify:
@@ -117,7 +119,34 @@ Or deploy directly to Coolify:
 3. Expose port `3000` for the web app
 4. Expose port `3001` for the MCP server
 5. Add volume for `/app/data` to persist SQLite database
-6. Set `BETTER_AUTH_SECRET` and `MCP_TOKEN` environment variables
+6. Set `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `MCP_TOKEN`, `APP_DOMAIN`, and `MCP_DOMAIN` environment variables
+
+### Runtime and existing-data upgrade
+
+Use Node.js 22 or newer. Both containers use `DATABASE_URL=file:/app/data/prod.db`
+and UID 1001 to share the `coffee-data` volume. Prisma resolves relative SQLite
+paths against the schema directory, so the old URL wrote under `/app/prisma/data`
+instead of the persistent volume. The app applies committed migrations before
+serving requests; MCP waits for its database health check. Restarts do not seed
+sample data. Uploaded photos live under `/app/data/uploads`.
+
+Before replacing an old container, back up its database (including any SQLite
+journal/WAL files) and uploads while both services are stopped. Check both
+`/app/prisma/data/prod.db` and `/app/data/prod.db`; the old services may have used
+separate databases. Copy the chosen database into the shared volume as `prod.db`
+and ensure its files and directory are writable by UID 1001. Do not delete the
+volume to fix a migration error.
+
+For an existing database created with `prisma db push`, first compare its schema
+with `prisma/schema.prisma`. Only if they match, baseline it once with
+`prisma migrate resolve --applied 20241003000000_init` using the same database URL,
+then run `prisma migrate deploy`. Databases with older schemas need a reviewed
+migration; do not mark the baseline applied to a mismatched schema. See
+[Prisma baselining](https://www.prisma.io/docs/orm/prisma-migrate/workflows/baselining).
+Fresh databases need no manual setup.
+
+MCP is an administrator integration with access to the entire database, including
+all users' coffees. Keep its required token private; it is not a per-user API.
 
 ## Environment Variables
 
@@ -126,7 +155,7 @@ Or deploy directly to Coolify:
 | `DATABASE_URL` | Yes | SQLite database path (e.g., `file:./data/dev.db`) |
 | `BETTER_AUTH_SECRET` | Yes | Secret for auth cookies (generate with `openssl rand -hex 32`) |
 | `BETTER_AUTH_URL` | Yes | App base URL (e.g., `http://localhost:5173`) |
-| `MCP_TOKEN` | No | Bearer token for MCP server auth (default: auto-generated) |
+| `MCP_TOKEN` | Yes for HTTP MCP | Private administrator bearer token; grants access to all coffees |
 | `MCP_PORT` | No | Port for MCP server (default: 3001) |
 
 ## Project Structure
@@ -195,3 +224,19 @@ coffee-tracker/
 ## License
 
 MIT © 2025 Rafael González Vázquez
+
+## Verification and audit notes
+
+Run `npm run typecheck` and `tests/docker-runtime.sh` (requires Docker Compose).
+The runtime suite builds both images against an isolated temporary volume, checks
+fresh migrations, registration/login/logout, ownership enforcement, uploads,
+SQLite searches, MCP CRUD and initialization, then restarts both containers and
+checks persistence without duplicate seed data. It removes only its test stack
+and test volume on exit.
+
+The October 2026 dependency audit reports 23 advisories (including development
+packages). `npm audit fix` makes no compatible updates with the current dependency
+graph. Remaining findings include the Remix 2 / React Router 6 stack, turbo-stream,
+braces, and development tooling such as tar. Resolving these requires a separate
+framework/dependency migration and validation; this runtime repair is not a clean
+security-audit certification. Never expose the development server publicly.

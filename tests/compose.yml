@@ -1,0 +1,21 @@
+# Use with docker-compose.yml; isolated names/volumes and no public proxy routes.
+services:
+  app:
+    image: coffee-tracker:audit
+    container_name: coffee-runtime-test-app
+    labels:
+      traefik.enable: "false"
+    environment:
+      BETTER_AUTH_SECRET: runtime-test-secret-at-least-32-characters
+      BETTER_AUTH_URL: http://127.0.0.1:3000
+    healthcheck:
+      interval: 2s
+      start_period: 5s
+  mcp:
+    image: coffee-tracker-mcp:audit
+    container_name: coffee-runtime-test-mcp
+    labels:
+      traefik.enable: "false"
+    healthcheck:
+      interval: 2s
+      start_period: 5s

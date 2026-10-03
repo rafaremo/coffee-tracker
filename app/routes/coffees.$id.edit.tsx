@@ -11,19 +11,22 @@ export const meta: MetaFunction<typeof loader> = ({ data }) => [
 ];
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  await requireAuth(request);
-  const coffee = await getCoffeeById(Number(params.id));
+  const session = await requireAuth(request);
+  const coffee = await getCoffeeById(Number(params.id), session.user.id);
   if (!coffee) throw new Response("Not Found", { status: 404 });
   return json({ coffee });
 }
 
 export async function action({ params, request }: ActionFunctionArgs) {
-  await requireAuth(request);
+  const session = await requireAuth(request);
+  const existing = await getCoffeeById(Number(params.id), session.user.id);
+  if (!existing) throw new Response("Not Found", { status: 404 });
   const formData = await request.formData();
   const data = Object.fromEntries(formData.entries());
 
   const parsed: Record<string, unknown> = {};
 
+  if (data.photoPath !== undefined) parsed.photoPath = data.photoPath ? String(data.photoPath) : null;
   if (data.name) parsed.name = String(data.name);
   if (data.brand !== undefined) parsed.brand = data.brand ? String(data.brand) : null;
   parsed.isFavorite = data.isFavorite === "true";
@@ -60,7 +63,7 @@ export async function action({ params, request }: ActionFunctionArgs) {
   if (data.weightG) parsed.weightG = parseInt(String(data.weightG), 10);
   else if (data.weightG === "") parsed.weightG = null;
 
-  await updateCoffee(Number(params.id), parsed);
+  await updateCoffee(Number(params.id), parsed, session.user.id);
   return redirect(`/coffees/${params.id}`);
 }
 
@@ -80,6 +83,7 @@ export default function EditCoffee() {
 
         <Form method="post" className="space-y-8">
           <Section title="Basic Info" color="amber">
+            <PhotoUploader defaultPhotoPath={coffee.photoPath ?? undefined} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="form-label">Name <span className="text-red-500">*</span></label>

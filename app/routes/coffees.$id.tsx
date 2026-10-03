@@ -10,18 +10,20 @@ export const meta: MetaFunction<typeof loader> = ({ data }) => [
 ];
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  await requireAuth(request);
-  const coffee = await getCoffeeById(Number(params.id));
+  const session = await requireAuth(request);
+  const coffee = await getCoffeeById(Number(params.id), session.user.id);
   if (!coffee) throw new Response("Not Found", { status: 404 });
   return json({ coffee });
 }
 
 export async function action({ params, request }: ActionFunctionArgs) {
-  await requireAuth(request);
+  const session = await requireAuth(request);
+  const existing = await getCoffeeById(Number(params.id), session.user.id);
+  if (!existing) throw new Response("Not Found", { status: 404 });
   const formData = await request.formData();
   const intent = formData.get("intent");
   if (intent === "delete") {
-    await deleteCoffee(Number(params.id));
+    await deleteCoffee(Number(params.id), session.user.id);
     return redirect("/coffees");
   }
   return null;

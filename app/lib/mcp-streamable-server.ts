@@ -1,9 +1,11 @@
+import type { Prisma } from "@prisma/client";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 
 const prisma = new PrismaClient();
-const MCP_TOKEN = process.env.MCP_TOKEN || process.env.MCP_BEARER_TOKEN || "coffee-tracker-dev-token-change-me";
+const MCP_TOKEN = process.env.MCP_TOKEN || process.env.MCP_BEARER_TOKEN;
+if (!MCP_TOKEN) throw new Error("MCP_TOKEN is required");
 const MCP_PORT = parseInt(process.env.MCP_PORT || "3001", 10);
 
 // Active SSE connections
@@ -168,16 +170,20 @@ function coffeeToDict(coffee: Record<string, unknown>) {
   };
 }
 
+function sendToolResult(res: import("node:http").ServerResponse, id: unknown, result: unknown) {
+  sendResult(res, id, { content: [{ type: "text", text: JSON.stringify(result) }] });
+}
+
 async function handleToolCall(id: unknown, name: string, args: Record<string, unknown>, res: ServerResponse) {
   try {
     switch (name) {
       case "list_coffees": {
-        const where: Record<string, unknown> = {};
+        const where: Prisma.CoffeeEntryWhereInput = {};
         if (args.favoriteOnly) where.isFavorite = true;
         if (args.search) {
           where.OR = [
-            { name: { contains: args.search as string, mode: "insensitive" } },
-            { brand: { contains: args.search as string, mode: "insensitive" } },
+            { name: { contains: args.search as string } },
+            { brand: { contains: args.search as string } },
           ];
         }
         const items = await prisma.coffeeEntry.findMany({
@@ -187,29 +193,29 @@ async function handleToolCall(id: unknown, name: string, args: Record<string, un
           take: (args.limit as number) || 20,
         });
         const total = await prisma.coffeeEntry.count({ where });
-        sendResult(res, id, { total, coffees: items.map(coffeeToDict) });
+        sendToolResult(res, id, { total, coffees: items.map(coffeeToDict) });
         break;
       }
       case "get_coffee": {
         const coffee = await prisma.coffeeEntry.findUnique({ where: { id: args.id as number } });
         if (!coffee) sendError(res, id, -32602, `Coffee ${args.id} not found`);
-        else sendResult(res, id, { coffee: coffeeToDict(coffee) });
+        else sendToolResult(res, id, { coffee: coffeeToDict(coffee) });
         break;
       }
       case "add_coffee": {
         const coffee = await prisma.coffeeEntry.create({ data: args as never });
-        sendResult(res, id, { coffee: coffeeToDict(coffee), message: `Added coffee: ${coffee.name}` });
+        sendToolResult(res, id, { coffee: coffeeToDict(coffee), message: `Added coffee: ${coffee.name}` });
         break;
       }
       case "update_coffee": {
         const { id: cid, ...data } = args;
         const coffee = await prisma.coffeeEntry.update({ where: { id: cid as number }, data: data as never });
-        sendResult(res, id, { coffee: coffeeToDict(coffee), message: `Updated coffee: ${coffee.name}` });
+        sendToolResult(res, id, { coffee: coffeeToDict(coffee), message: `Updated coffee: ${coffee.name}` });
         break;
       }
       case "delete_coffee": {
         await prisma.coffeeEntry.delete({ where: { id: args.id as number } });
-        sendResult(res, id, { message: `Deleted coffee ${args.id}` });
+        sendToolResult(res, id, { message: `Deleted coffee ${args.id}` });
         break;
       }
       case "get_stats": {
@@ -217,11 +223,11 @@ async function handleToolCall(id: unknown, name: string, args: Record<string, un
         const favorites = await prisma.coffeeEntry.count({ where: { isFavorite: true } });
         const avgRating = await prisma.coffeeEntry.aggregate({ _avg: { myRating: true } });
         const avgSca = await prisma.coffeeEntry.aggregate({ _avg: { scaScore: true } });
-        sendResult(res, id, {
+        sendToolResult(res, id, {
           totalEntries: total,
           totalFavorites: favorites,
-          avgRating: avgRating._avg.myRating ? Math.round(avgRating._avg.myRating * 100) / 100 : null,
-          avgScaScore: avgSca._avg.scaScore ? Math.round(avgSca._avg.scaScore * 100) / 100 : null,
+          avgRating: avgRating._avg.myRating != null ? Math.round(avgRating._avg.myRating * 100) / 100 : null,
+          avgScaScore: avgSca._avg.scaScore != null ? Math.round(avgSca._avg.scaScore * 100) / 100 : null,
         });
         break;
       }
@@ -231,7 +237,7 @@ async function handleToolCall(id: unknown, name: string, args: Record<string, un
           orderBy: { createdAt: "desc" },
           take: (args.limit as number) || 10,
         });
-        sendResult(res, id, { total: items.length, coffees: items.map(coffeeToDict) });
+        sendToolResult(res, id, { total: items.length, coffees: items.map(coffeeToDict) });
         break;
       }
       default:
@@ -257,7 +263,12 @@ const server = createServer(async (req, res) => {
 
   // GET /health
   if (req.method === "GET" && url === "/health") {
-    sendJson(res, 200, { status: "ok", server: "coffee-tracker-mcp", version: "1.0.0" });
+    try {
+      await prisma.coffeeEntry.count();
+      sendJson(res, 200, { status: "ok" });
+    } catch {
+      sendJson(res, 503, { status: "unavailable" });
+    }
     return;
   }
 
@@ -305,6 +316,7 @@ const server = createServer(async (req, res) => {
     let msg: Record<string, unknown>;
     try {
       msg = await parseBody(req);
+      if (!msg || Array.isArray(msg) || typeof msg !== "object") throw new Error("Invalid request");
     } catch {
       sendJson(res, 400, { error: "Invalid JSON body" });
       return;
@@ -315,6 +327,8 @@ const server = createServer(async (req, res) => {
 
     // Handle initialize
     if (method === "initialize") {
+      res.setHeader("Mcp-Session-Id", sessionId);
+      res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
       sendJson(res, 200, {
         jsonrpc: "2.0",
         id,
@@ -328,10 +342,6 @@ const server = createServer(async (req, res) => {
       },
       // Set session header
       );
-      if (id) {
-        res.setHeader("Mcp-Session-Id", sessionId);
-        res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
-      }
       return;
     }
 
@@ -354,6 +364,12 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (method?.startsWith("notifications/")) {
+      res.writeHead(202);
+      res.end();
+      return;
+    }
+
     // Unknown method
     if (id !== undefined && id !== null) {
       sendError(res, id, -32601, `Method not found: ${method}`);
@@ -365,6 +381,10 @@ const server = createServer(async (req, res) => {
 
   // DELETE /mcp - Close session
   if (req.method === "DELETE" && url === "/mcp") {
+    if (getAuthToken(req) !== MCP_TOKEN) {
+      sendJson(res, 401, { error: "Unauthorized" });
+      return;
+    }
     const sessionId = req.headers["mcp-session-id"] as string;
     if (sessionId && sessions.has(sessionId)) {
       const sessionRes = sessions.get(sessionId)!;
@@ -384,10 +404,8 @@ server.listen(MCP_PORT, () => {
   console.log(`\u2615 Coffee Tracker MCP Streamable HTTP Server`);
   console.log(`   URL: http://localhost:${MCP_PORT}/mcp`);
   console.log(`   Health: http://localhost:${MCP_PORT}/health`);
-  console.log(`\ud83d\udd12 Bearer token: ${MCP_TOKEN.slice(0, 12)}...`);
   console.log("");
   console.log("Para conectar en ChatGPT:");
   console.log(`   Tipo: HTTP secuenciable`);
   console.log(`   URL: https://tu-dominio.com:${MCP_PORT}/mcp`);
-  console.log(`   Token: ${MCP_TOKEN.slice(0, 20)}...`);
 });

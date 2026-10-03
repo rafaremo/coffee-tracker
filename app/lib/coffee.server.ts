@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "./db.server";
 
 export async function getAllCoffees({
@@ -13,7 +14,7 @@ export async function getAllCoffees({
   skip?: number;
   limit?: number;
 }) {
-  const where: Record<string, unknown> = {};
+  const where: Prisma.CoffeeEntryWhereInput = {};
 
   if (userId) {
     where.userId = userId;
@@ -25,13 +26,13 @@ export async function getAllCoffees({
 
   if (search) {
     where.OR = [
-      { name: { contains: search, mode: "insensitive" } },
-      { brand: { contains: search, mode: "insensitive" } },
-      { country: { contains: search, mode: "insensitive" } },
-      { region: { contains: search, mode: "insensitive" } },
-      { variety: { contains: search, mode: "insensitive" } },
-      { tastingNotes: { contains: search, mode: "insensitive" } },
-      { tags: { contains: search, mode: "insensitive" } },
+      { name: { contains: search } },
+      { brand: { contains: search } },
+      { country: { contains: search } },
+      { region: { contains: search } },
+      { variety: { contains: search } },
+      { tastingNotes: { contains: search } },
+      { tags: { contains: search } },
     ];
   }
 
@@ -48,23 +49,24 @@ export async function getAllCoffees({
   return { items, total };
 }
 
-export async function getCoffeeById(id: number) {
-  return prisma.coffeeEntry.findUnique({ where: { id } });
+export async function getCoffeeById(id: number, userId: string) {
+  if (!Number.isSafeInteger(id) || id < 1) return null;
+  return prisma.coffeeEntry.findUnique({ where: { id, userId } });
 }
 
 export async function createCoffee(data: Record<string, unknown>) {
   return prisma.coffeeEntry.create({ data: data as never });
 }
 
-export async function updateCoffee(id: number, data: Record<string, unknown>) {
+export async function updateCoffee(id: number, data: Record<string, unknown>, userId: string) {
   return prisma.coffeeEntry.update({
-    where: { id },
+    where: { id, userId },
     data: data as never,
   });
 }
 
-export async function deleteCoffee(id: number) {
-  return prisma.coffeeEntry.delete({ where: { id } });
+export async function deleteCoffee(id: number, userId: string) {
+  return prisma.coffeeEntry.delete({ where: { id, userId } });
 }
 
 export async function getStats(userId?: string) {
@@ -137,10 +139,10 @@ export async function getStats(userId?: string) {
   return {
     totalEntries,
     totalFavorites,
-    avgRating: avgRating._avg.myRating
+    avgRating: avgRating._avg.myRating != null
       ? Math.round(avgRating._avg.myRating * 100) / 100
       : null,
-    avgScaScore: avgSca._avg.scaScore
+    avgScaScore: avgSca._avg.scaScore != null
       ? Math.round(avgSca._avg.scaScore * 100) / 100
       : null,
     topCountries: countField("country"),
