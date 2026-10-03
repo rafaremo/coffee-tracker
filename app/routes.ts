@@ -1,0 +1,23 @@
+import { route, get, post } from "remix/routes";
+export const routes = route({
+  home: get("/"),
+  login: get("/login"),
+  signIn: post("/login"),
+  signOut: post("/logout"),
+  newCoffee: get("/coffees/new"),
+  createCoffee: post("/coffees/new"),
+  coffee: get("/coffees/:id"),
+  editCoffee: get("/coffees/:id/edit"),
+  updateCoffee: post("/coffees/:id/edit"),
+  confirmDelete: get("/coffees/:id/delete"),
+  deleteCoffee: post("/coffees/:id/delete"),
+  favorite: post("/coffees/:id/favorite"),
+  connect: get("/connect"),
+  revoke: post("/connect/revoke"),
+  approvePage: get("/connect/:id"),
+  approve: post("/connect/:id"),
+  photo: get("/uploads/*filename"),
+  health: get("/health"),
+  stylesheet: get("/style.css"),
+  favicon: get("/favicon.svg"),
+});

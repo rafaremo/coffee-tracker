@@ -1,12 +1,13 @@
 {
   "mcpServers": {
     "coffee-tracker": {
-      "command": "npx",
-      "args": ["tsx", "app/lib/mcp-server.ts"],
-      "description": "Coffee Tracker MCP server for managing specialty coffee entries",
-      "env": {
-        "DATABASE_URL": "file:./data/dev.db"
-      }
+      "command": "/absolute/path/to/node",
+      "args": [
+        "--import",
+        "/absolute/path/to/coffee-tracker/node_modules/remix/dist/node-tsx.js",
+        "/absolute/path/to/coffee-tracker/mcp-stdio.ts"
+      ],
+      "env": { "DATA_DIR": "/absolute/path/to/coffee-tracker/data" }
     }
   }
 }

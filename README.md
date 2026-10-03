@@ -1,242 +1,184 @@
-# ☕ Coffee Tracker
+# Coffee Journal
 
-Track your specialty coffee journey with a beautiful web dashboard, full authentication, photo uploads, and MCP server for AI agents.
+A personal coffee tracker built with **Remix 3**, Node's built-in SQLite, and the
+**official Model Context Protocol SDK**. One collection, one owner password, one
+container. The web app and assistants always use the same data.
 
-Built with **Remix 2**, **Prisma**, **SQLite**, **Tailwind CSS**, **Chart.js**, and **Better Auth**.
+## What it does
 
-## Features
+- Save coffees with a name; add origins, roast details, ratings, tasting notes,
+  brewing methods, purchase details, favorites, and photos when you have them.
+- Search your collection, filter favorites, and see simple collection statistics.
+- Ask ChatGPT or Claude to read, add, update, or delete coffee entries.
+- Approve assistant connections through OAuth; disconnect them from the Assistants page.
+- Use the responsive web UI without a client JavaScript bundle.
 
-- **Full coffee profile tracking**: origin, variety, process, roast level, altitude, tasting notes, SCA scores
-- **Photo support**: attach pictures of your coffee bags with drag & drop
-- **User authentication**: email/password login with Better Auth (every user sees only their coffees)
-- **Web dashboard**: interactive charts showing your favorite regions, varieties, brewing methods, and more
-- **MCP Server**: control your coffee database from any AI agent (Claude, ChatGPT, etc.)
-  - **STDIO** (local): for Claude Desktop/Code
-  - **HTTP**: for simple HTTP clients
-  - **Streamable HTTP**: for ChatGPT's MCP integration with SSE
-- **SQLite database**: simple, portable, no setup required
-- **All fields optional**: not every coffee needs every detail
-- **Coffee-themed UI**: warm browns, amber, cream, espresso, and latte colors
+This is a single-owner app. There is no signup, user management, Prisma generation,
+separate MCP service, or automatic sample-data seeding.
 
-## Quick Start
+## Local setup
 
-```bash
-# Install dependencies
+Install **Node.js 24.3 or newer** (Node 24 LTS recommended), then:
+
+```sh
 npm ci
 cp .env.example .env
-
-# Set up database
-npx prisma migrate deploy
-# Optional demo records (not attached to a user):
-npx prisma db seed
-
-# Start dev server
+# Set APP_PASSWORD in .env to a unique password of at least 16 characters.
+# Example password generator: openssl rand -hex 24
 npm run dev
 ```
 
-Open http://localhost:5173 in your browser.
+Open `http://localhost:3000` and enter that password. The database and upload
+directory are created automatically before requests are accepted.
 
-## Authentication
+`npm start` runs the production server. `npm run build` performs TypeScript
+validation: Remix 3 runs TypeScript/JSX through its `remix/node-tsx` loader, so
+there is no Remix 2/Vite build output to generate.
 
-The app uses **Better Auth** with email/password. Register at `/register`, login at `/login`. All coffee data is scoped to the logged-in user.
+The implementation follows [Remix 3's guide](https://guides.remix.run/start-here/):
+typed route definitions, a Fetch router, native Remix components, server rendering,
+and ordinary HTML forms. Express handles the MCP SDK's OAuth/transport middleware
+and passes web requests to the Remix adapter.
 
-## MCP Server Options
+## Docker / Coolify
 
-### 1. STDIO (Local - Claude Desktop/Code)
+Use the repository's Docker Compose configuration. Deploy **one service**, `app`,
+with port **3000** behind your HTTPS reverse proxy. Set:
 
-```json
-{
-  "mcpServers": {
-    "coffee-tracker": {
-      "command": "npx",
-      "args": ["tsx", "app/lib/mcp-server.ts"],
-      "description": "Coffee Tracker MCP server"
-    }
-  }
-}
-```
+| Variable       | Value                                                                   |
+| -------------- | ----------------------------------------------------------------------- |
+| `APP_URL`      | The exact public origin, e.g. `https://coffee.example.com`              |
+| `APP_DOMAIN`   | The hostname for the included Traefik labels, e.g. `coffee.example.com` |
+| `APP_PASSWORD` | Your unique owner password, at least 16 characters                      |
 
-### 2. HTTP (REST API)
+The container already sets `DATA_DIR=/app/data` and `PORT=3000`.
 
-```bash
-npm run mcp:http
-# Server runs on http://localhost:3001/mcp
-# Auth: Bearer <MCP_TOKEN>
-```
-
-### 3. Streamable HTTP (ChatGPT MCP)
-
-```bash
-npm run mcp:streamable
-# Server runs on http://localhost:3001/mcp
-# Supports SSE notifications + JSON-RPC over HTTP
-# Auth: Bearer <MCP_TOKEN>
-```
-
-**For ChatGPT MCP integration:**
-
-| Field | Value |
-|-------|-------|
-| **Tipo** | HTTP secuenciable |
-| **URL** | `https://tu-dominio.com:3001/mcp` |
-| **Variable de entorno del token** | `MCP_BEARER_TOKEN` |
-| **Encabezado** | `Authorization: Bearer <tu-token>` |
-
-### Available MCP Tools
-
-- `list_coffees` - List all coffee entries with optional filters
-- `get_coffee` - Get detailed info about a coffee by ID
-- `add_coffee` - Add a new coffee entry
-- `update_coffee` - Update an existing coffee entry
-- `delete_coffee` - Delete a coffee entry
-- `get_stats` - Get collection statistics
-- `get_favorites` - Get your favorite coffees
-
-## Coffee Data Fields
-
-All fields are optional:
-
-| Category | Fields |
-|----------|--------|
-| **Basic** | name, brand, photo, is_favorite, tags, personal_notes |
-| **Origin** | country, region, farm, producer, altitude, variety, process, harvest_date, lot |
-| **Roasting** | roast_level, roast_date, roaster_notes |
-| **Cupping** | my_rating (0-10), sca_score (0-100), tasting_notes, body, acidity, sweetness, aroma, aftertaste |
-| **Brewing** | brewing_methods (comma-separated) |
-| **Purchase** | date, place, price_per_kg, weight_g |
-
-## Docker Deployment (Coolify)
-
-```bash
-# Build and run with docker-compose
-# This starts both the web app (port 3000) and MCP server (port 3001)
+```sh
 docker compose up -d --build
+docker compose logs --tail=100 app
 ```
 
-Or deploy directly to Coolify:
-1. Connect your Git repository
-2. Set build context to `./`
-3. Expose port `3000` for the web app
-4. Expose port `3001` for the MCP server
-5. Add volume for `/app/data` to persist SQLite database
-6. Set `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `MCP_TOKEN`, `APP_DOMAIN`, and `MCP_DOMAIN` environment variables
+The Compose file supplies Traefik labels; it does not install a reverse proxy.
+For another proxy, route your domain to the container's port 3000. Route **all
+paths** on that origin, including `/mcp`, `/authorize`, `/token`, `/register`,
+`/revoke`, and `/.well-known/*`. Do not put proxy basic authentication in front of
+these routes. The application supplies owner login and OAuth authentication.
 
-### Runtime and existing-data upgrade
+Use one app replica and retain the `coffee-data` volume at `/app/data`. The image
+runs as the standard Node user (UID 1000); an existing bind mount must be writable
+by that user. `/health` checks database availability. The migrations run before
+the HTTP listener starts and are checksum-verified on subsequent starts.
 
-Use Node.js 22 or newer. Both containers use `DATABASE_URL=file:/app/data/prod.db`
-and UID 1001 to share the `coffee-data` volume. Prisma resolves relative SQLite
-paths against the schema directory, so the old URL wrote under `/app/prisma/data`
-instead of the persistent volume. The app applies committed migrations before
-serving requests; MCP waits for its database health check. Restarts do not seed
-sample data. Uploaded photos live under `/app/data/uploads`.
+This is the fresh-app Remix 3 replacement. It uses `coffee.db`; legacy `prod.db`
+or `prisma/data/*.db` files are not imported or modified. The old `DATABASE_URL`,
+`BETTER_AUTH_*`, `MCP_TOKEN`, `MCP_DOMAIN`, and second MCP container are no longer
+used. Start a fresh volume for this new app, or retain old files separately if you
+have experimental data you want to keep.
 
-Before replacing an old container, back up its database (including any SQLite
-journal/WAL files) and uploads while both services are stopped. Check both
-`/app/prisma/data/prod.db` and `/app/data/prod.db`; the old services may have used
-separate databases. Copy the chosen database into the shared volume as `prod.db`
-and ensure its files and directory are writable by UID 1001. Do not delete the
-volume to fix a migration error.
+## Connect ChatGPT and Claude
 
-For an existing database created with `prisma db push`, first compare its schema
-with `prisma/schema.prisma`. Only if they match, baseline it once with
-`prisma migrate resolve --applied 20241003000000_init` using the same database URL,
-then run `prisma migrate deploy`. Databases with older schemas need a reviewed
-migration; do not mark the baseline applied to a mismatched schema. See
-[Prisma baselining](https://www.prisma.io/docs/orm/prisma-migrate/workflows/baselining).
-Fresh databases need no manual setup.
+Both remote clients use the same URL:
 
-MCP is an administrator integration with access to the entire database, including
-all users' coffees. Keep its required token private; it is not a per-user API.
-
-## Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DATABASE_URL` | Yes | SQLite database path (e.g., `file:./data/dev.db`) |
-| `BETTER_AUTH_SECRET` | Yes | Secret for auth cookies (generate with `openssl rand -hex 32`) |
-| `BETTER_AUTH_URL` | Yes | App base URL (e.g., `http://localhost:5173`) |
-| `MCP_TOKEN` | Yes for HTTP MCP | Private administrator bearer token; grants access to all coffees |
-| `MCP_PORT` | No | Port for MCP server (default: 3001) |
-
-## Project Structure
-
-```
-coffee-tracker/
-├── app/
-│   ├── components/           # React components
-│   │   ├── Navbar.tsx
-│   │   ├── StatCard.tsx
-│   │   ├── CoffeeCard.tsx
-│   │   └── PhotoUploader.tsx   # Drag & drop photo upload
-│   ├── lib/
-│   │   ├── auth.server.ts      # Better Auth configuration
-│   │   ├── session.server.ts   # Session helpers
-│   │   ├── db.server.ts        # Prisma client
-│   │   ├── coffee.server.ts    # DB operations (user-scoped)
-│   │   ├── mcp-server.ts       # STDIO MCP server
-│   │   ├── mcp-http-server.ts  # HTTP MCP server
-│   │   └── mcp-streamable-server.ts # Streamable HTTP MCP (ChatGPT)
-│   ├── routes/
-│   │   ├── _layout.tsx           # Shared layout + auth
-│   │   ├── _index.tsx            # Dashboard with charts
-│   │   ├── login.tsx             # Sign In
-│   │   ├── register.tsx          # Sign Up
-│   │   ├── logout.tsx
-│   │   ├── api.auth.$.tsx        # Better Auth API endpoint
-│   │   ├── api.upload.tsx        # Photo upload API
-│   │   ├── coffees._index.tsx    # Coffee list
-│   │   ├── coffees.$id.tsx       # Coffee detail
-│   │   ├── coffees.new.tsx       # Add coffee
-│   │   └── coffees.$id.edit.tsx  # Edit coffee
-│   ├── root.tsx              # Root layout
-│   ├── entry.server.tsx      # SSR entry
-│   └── tailwind.css          # Tailwind styles
-├── prisma/
-│   ├── schema.prisma         # Database schema (Coffee + Auth tables)
-│   └── seed.ts               # Seed data (6 specialty coffees)
-├── public/
-├── Dockerfile              # Web app Docker image
-├── Dockerfile.mcp          # MCP server Docker image
-├── docker-compose.yml      # Full stack with app + mcp
-├── package.json
-├── tailwind.config.ts
-├── tsconfig.json
-├── vite.config.ts
-└── .env.example
+```text
+https://coffee.example.com/mcp
 ```
 
-## Color Palette
+1. In your assistant's custom app/plugin or connector settings, add that URL.
+2. Select **OAuth** if asked. Discovery and dynamic client registration are
+   provided automatically; no client ID, secret, or API key needs to be pasted.
+3. Sign in on the coffee app's own page with your owner password.
+4. Review the client and return address, then approve the connection.
+5. Ask about your coffees, or ask the assistant to add a new one.
 
-| Token | Color | Usage |
-|-------|-------|-------|
-| coffee-50 | #fdf8f6 | Page background |
-| coffee-100 | #f2e8e5 | Card backgrounds |
-| coffee-500 | #a07e6a | Secondary text |
-| coffee-700 | #634832 | Primary text |
-| coffee-800 | #4a3428 | Dark text |
-| coffee-900 | #2b1d15 | Darkest text |
-| espresso-600 | #67431a | Primary buttons |
-| latte-200 | #ffeacc | Highlight backgrounds |
-| crema-500 | #ffc366 | Accent |
-| roast.light | #d4a574 | Light roast indicator |
-| roast.dark | #3e2723 | Dark roast indicator |
+For example: “Add a washed Ethiopian coffee from Onyx. Jasmine and bergamot notes,
+9.2 out of 10, and mark it as a favorite.”
 
-## License
+The app supports Streamable HTTP, OAuth authorization code with S256 PKCE,
+resource-bound tokens, rotating refresh tokens, and revocation. The SDK handles
+protocol negotiation and MCP request/response validation. Seven tools are exposed:
+`list_coffees`, `get_coffee`, `add_coffee`, `update_coffee`, `delete_coffee`,
+`get_stats`, and `get_favorites`. Tool schemas and web forms share validation rules.
+The delete tool is marked destructive; read tools are marked read-only.
 
-MIT © 2025 Rafael González Vázquez
+Custom connector availability depends on your assistant account/workspace.
+Follow the current [ChatGPT connection instructions](https://developers.openai.com/plugins/deploy/connect-chatgpt)
+and [Claude remote connector instructions](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp).
+ChatGPT's [OAuth requirements](https://developers.openai.com/plugins/build/auth)
+are why the app has an owner approval flow instead of a hard-coded bearer token.
+Actual ChatGPT/Claude account linking requires your deployed HTTPS endpoint; the
+local suite verifies the protocol using the official SDK client.
 
-## Verification and audit notes
+### Local Claude / stdio
 
-Run `npm run typecheck` and `tests/docker-runtime.sh` (requires Docker Compose).
-The runtime suite builds both images against an isolated temporary volume, checks
-fresh migrations, registration/login/logout, ownership enforcement, uploads,
-SQLite searches, MCP CRUD and initialization, then restarts both containers and
-checks persistence without duplicate seed data. It removes only its test stack
-and test volume on exit.
+For a client that supports local stdio servers, adapt `mcp-config.json` with
+absolute paths to Node 24 and this checkout. The command is equivalent to:
 
-The October 2026 dependency audit reports 23 advisories (including development
-packages). `npm audit fix` makes no compatible updates with the current dependency
-graph. Remaining findings include the Remix 2 / React Router 6 stack, turbo-stream,
-braces, and development tooling such as tar. Resolving these requires a separate
-framework/dependency migration and validation; this runtime repair is not a clean
-security-audit certification. Never expose the development server publicly.
+```sh
+DATA_DIR=/absolute/path/to/coffee-tracker/data npm run mcp
+```
+
+The supplied JSON uses the absolute Remix loader path so it works even when the
+client starts in a different working directory. Stdio relies on local filesystem
+access and does not require your web password. Use the remote OAuth URL if your
+web app is hosted elsewhere; a local `DATA_DIR` is a separate collection unless
+it points at that same filesystem.
+
+## Storage and access
+
+- `DATA_DIR/coffee.db`: coffees, migrations, browser sessions, registered OAuth
+  clients, grants, and hashed token lookup keys. SQLite WAL mode is enabled.
+- `DATA_DIR/uploads/`: photos, authenticated when served by the app.
+- Browser sessions last 30 days. Access tokens last one hour; assistant grants
+  and refresh tokens last up to 90 days, after which reconnect in your assistant.
+- **Assistants → Disconnect all assistants** revokes every remote grant immediately.
+- Changing `APP_PASSWORD` and restarting invalidates existing browser sessions
+  and assistant grants. There is no email-based password recovery.
+
+Back up the entire data directory while the app and any local stdio process are
+stopped, including any SQLite WAL files. Restore it with the same owner password
+if you want existing sessions/connections to remain valid. Keep the backup private.
+Deleting a coffee removes its record; unused uploaded image files are retained
+on disk, so backups can still contain those images.
+
+## Checks
+
+```sh
+npm run typecheck
+npm test
+npm audit
+tests/docker-runtime.sh
+```
+
+The tests cover input validation, zero ratings, case-insensitive search, partial
+updates, migrations, owner login/logout, CSRF checks, private uploads, OAuth
+registration/consent/PKCE, redirect and resource validation, one-time codes, refresh
+rotation, revocation, official MCP client calls, and local stdio from a different
+working directory. The Docker suite additionally verifies non-root startup and
+persistence of records, photos, browser sessions, and OAuth tokens after restart.
+It creates and removes only an isolated test stack and volume.
+
+The dependency audit is clean as of this migration. The `esbuild` override keeps
+Remix's transitive test tooling on a patched release; revisit it when Remix updates
+that dependency. A clean audit is a dependency snapshot, not a security guarantee.
+
+## Project layout
+
+```text
+server.ts                 Node entrypoint and graceful shutdown
+mcp-stdio.ts              Local MCP transport
+app/routes.ts             Typed Remix route map
+app/router.tsx            Web actions and owner access boundary
+app/ui/pages.tsx          Native Remix 3 components
+app/coffee.ts             Shared model, validation, and collection operations
+app/db.ts                 SQLite store and migration runner
+app/auth.ts               Single-owner browser sessions
+app/oauth.ts              OAuth provider backed by SQLite
+app/mcp.ts                Shared MCP tools
+app/server.ts             HTTP/OAuth/MCP and Remix adapters
+app/uploads.ts            Bounded image uploads and private file responses
+db/migrations/            Versioned SQL
+public/style.css          Responsive styles
+tests/                    Database, protocol, and Docker regression tests
+```
+
+MIT — see LICENSE.

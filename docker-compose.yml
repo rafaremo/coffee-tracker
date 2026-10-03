@@ -1,64 +1,23 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: coffee-tracker
+    build: .
     restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      APP_URL: ${APP_URL:?Set APP_URL to your public HTTPS origin}
+      APP_PASSWORD: ${APP_PASSWORD:?Set a private owner password of at least 16 characters}
+      DATA_DIR: /app/data
+      PORT: 3000
     expose:
       - "3000"
-    environment:
-      - NODE_ENV=production
-      - DATABASE_URL=file:/app/data/prod.db
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-https://${APP_DOMAIN}}
-      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET}
-      - MCP_TOKEN=${MCP_TOKEN:?Set MCP_TOKEN}
     volumes:
       - coffee-data:/app/data
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.coffee-app.rule=Host(`${APP_DOMAIN}`)"
+      - "traefik.http.routers.coffee-app.rule=Host(`${APP_DOMAIN:?Set APP_DOMAIN}`)"
       - "traefik.http.routers.coffee-app.entrypoints=websecure"
       - "traefik.http.routers.coffee-app.tls.certresolver=letsencrypt"
       - "traefik.http.services.coffee-app.loadbalancer.server.port=3000"
-
-  mcp:
-    build:
-      context: .
-      dockerfile: Dockerfile.mcp
-    depends_on:
-      app:
-        condition: service_healthy
-    container_name: coffee-tracker-mcp
-    restart: unless-stopped
-    expose:
-      - "3001"
-    environment:
-      - NODE_ENV=production
-      - DATABASE_URL=file:/app/data/prod.db
-      - MCP_PORT=3001
-      - MCP_TOKEN=${MCP_TOKEN:?Set MCP_TOKEN}
-    volumes:
-      - coffee-data:/app/data
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.coffee-mcp.rule=Host(`${MCP_DOMAIN}`)"
-      - "traefik.http.routers.coffee-mcp.entrypoints=websecure"
-      - "traefik.http.routers.coffee-mcp.tls.certresolver=letsencrypt"
-      - "traefik.http.services.coffee-mcp.loadbalancer.server.port=3001"
-
 volumes:
   coffee-data:
-    driver: local

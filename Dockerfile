@@ -1,47 +1,26 @@
 # syntax=docker/dockerfile:1
-FROM node:22-bookworm-slim AS base
-
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
-
-# Install dependencies only when needed
-FROM base AS deps
+FROM node:24-bookworm-slim AS dependencies
 WORKDIR /app
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json ./
 RUN npm ci
 
-# Rebuild the source code only when needed
-FROM base AS builder
+FROM dependencies AS check
+COPY tsconfig.json server.ts mcp-stdio.ts ./
+COPY app ./app
+COPY tests ./tests
+RUN npm run typecheck
+
+FROM node:24-bookworm-slim AS production
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-
-RUN npx prisma generate
-RUN npm run build
-
-# Production image
-FROM base AS runner
-WORKDIR /app
-
-ENV NODE_ENV=production
-ENV DATABASE_URL=file:/app/data/prod.db
-
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 remix
-
-RUN mkdir -p /app/data/uploads && chown -R remix:nodejs /app/data
-
-COPY --from=builder --chown=remix:nodejs /app/build ./build
-COPY --from=builder --chown=remix:nodejs /app/package.json ./package.json
-COPY --from=builder --chown=remix:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=remix:nodejs /app/node_modules ./node_modules
-
-RUN ln -s /app/data/uploads /app/build/client/uploads
-
-USER remix
-
+ENV NODE_ENV=production PORT=3000 DATA_DIR=/app/data
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=check /app/app ./app
+COPY --from=check /app/server.ts /app/mcp-stdio.ts /app/tsconfig.json ./
+COPY db ./db
+COPY public/style.css public/favicon.svg ./public/
+RUN mkdir -p /app/data && chown node:node /app/data
+USER node
 EXPOSE 3000
-
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
-
-CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && exec ./node_modules/.bin/remix-serve ./build/server/index.js"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD node -e "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "--import", "remix/node-tsx", "server.ts"]
