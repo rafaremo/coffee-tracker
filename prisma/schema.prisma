@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model CoffeeEntry {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  userId    String?  @map("user_id")
+
+  // Basic info
+  name           String
+  brand          String?
+  photoPath      String? @map("photo_path")
+  isFavorite     Boolean @default(false) @map("is_favorite")
+  tags           String?
+  personalNotes  String? @map("personal_notes")
+
+  // Origin & Traceability
+  country       String?
+  region        String?
+  farm          String?
+  producer      String?
+  altitudeMasl  Int?    @map("altitude_masl")
+  variety       String?
+  process       String?
+  harvestDate   String? @map("harvest_date")
+  lot           String?
+
+  // Roasting
+  roastLevel   String? @map("roast_level")
+  roastDate    String? @map("roast_date")
+  roasterNotes String? @map("roaster_notes")
+
+  // Cupping / Tasting
+  myRating      Float?  @map("my_rating")
+  scaScore      Float?  @map("sca_score")
+  tastingNotes  String? @map("tasting_notes")
+  body          String?
+  acidity       String?
+  sweetness     String?
+  aroma         String?
+  aftertaste    String?
+
+  // Brewing
+  brewingMethods String? @map("brewing_methods")
+
+  // Purchase
+  purchaseDate  String? @map("purchase_date")
+  purchasePlace String? @map("purchase_place")
+  pricePerKg    Float?  @map("price_per_kg")
+  weightG       Int?    @map("weight_g")
+
+  @@map("coffee_entries")
+}
+
+// Better Auth tables
+model User {
+  id            String    @id
+  name          String?
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("verification")
+}

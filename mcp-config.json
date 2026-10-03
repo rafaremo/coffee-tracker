@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "coffee-tracker": {
+      "command": "npx",
+      "args": ["tsx", "app/lib/mcp-server.ts"],
+      "description": "Coffee Tracker MCP server for managing specialty coffee entries",
+      "env": {
+        "DATABASE_URL": "file:./data/dev.db"
+      }
+    }
+  }
+}
