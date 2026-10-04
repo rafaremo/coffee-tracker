@@ -24,6 +24,18 @@ input,
 textarea {
   font: inherit;
 }
+/* Prevent iOS Safari from zooming when text inputs receive focus. */
+input:not([type]),
+input[type=""],
+input[type="text"],
+input[type="search"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+input[type="url"] {
+  font-size: 16px;
+}
 button,
 a,
 input,
@@ -245,7 +257,6 @@ p {
   background: transparent;
   margin: 0;
   padding: 11px 13px;
-  font-size: 12px;
 }
 .search .button {
   padding: 11px 15px;
