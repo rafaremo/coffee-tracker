@@ -59,7 +59,7 @@ test("local Claude stdio transport works from another working directory", async 
   const client = new Client({ name: "claude-stdio-test", version: "1.0.0" });
   try {
     await client.connect(transport);
-    assert.equal((await client.listTools()).tools.length, 7);
+    assert.equal((await client.listTools()).tools.length, 9);
     const result = await client.callTool({
       name: "add_coffee",
       arguments: { name: "Local Claude coffee" },

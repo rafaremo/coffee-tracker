@@ -95,10 +95,10 @@ For example: “Add a washed Ethiopian coffee from Onyx. Jasmine and bergamot no
 
 The app supports Streamable HTTP, OAuth authorization code with S256 PKCE,
 resource-bound tokens, rotating refresh tokens, and revocation. The SDK handles
-protocol negotiation and MCP request/response validation. Seven tools are exposed:
+protocol negotiation and MCP request/response validation. Nine tools are exposed:
 `list_coffees`, `get_coffee`, `add_coffee`, `update_coffee`, `delete_coffee`,
-`get_stats`, and `get_favorites`. Tool schemas and web forms share validation rules.
-The delete tool is marked destructive; read tools are marked read-only.
+`get_stats`, `get_favorites`, `add_tasting`, and `delete_tasting`. Tool schemas and web forms share validation rules.
+The delete tools are marked destructive; read tools are marked read-only.
 
 Custom connector availability depends on your assistant account/workspace.
 Follow the current [ChatGPT connection instructions](https://developers.openai.com/plugins/deploy/connect-chatgpt)
@@ -182,3 +182,21 @@ tests/                    Database, protocol, and Docker regression tests
 ```
 
 MIT — see LICENSE.
+
+### Per-brew tasting log
+
+Each coffee can have an optional embedded `tastings` array. Each entry has a
+`date` (YYYY-MM-DD), a free-text `method`, a `rating` from 0 to 10, and optional
+`notes`. Coffee-level ratings and personal notes remain separate. The detail page
+shows the history newest-first, its count and average, and the latest tasting
+rating. Entries on the same date show the most recently added first.
+
+Use `add_tasting` with the coffee `id` and tasting fields, or `delete_tasting`
+with the coffee `id` and the zero-based `index` from a fresh `get_coffee` response.
+Indexes refer to the stored array, not the sorted display. `add_coffee` and
+`update_coffee` also accept `tastings`; updating that field replaces the full array.
+
+Authenticated web actions accept form POSTs or `application/json` POSTs:
+`/coffees/:id/tastings` adds an entry and
+`/coffees/:id/tastings/:index/delete` deletes one. JSON requests return the updated
+coffee; forms redirect to the tasting log. Existing session and origin checks apply.

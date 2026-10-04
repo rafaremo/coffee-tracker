@@ -4,7 +4,7 @@ import { render } from "remix/middleware/render";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { routes } from "./routes.ts";
-import { Coffees, coffeeForm, type Coffee } from "./coffee.ts";
+import { Coffees, coffeeForm, tastingForm, type Coffee } from "./coffee.ts";
 import type { OwnerAuth } from "./auth.ts";
 import type { CoffeeOAuth } from "./oauth.ts";
 import { boundedForm, savePhoto, photoResponse } from "./uploads.ts";
@@ -189,6 +189,63 @@ export function createWebRouter(
         const coffee = getCoffee(params.id);
         coffees.update(coffee.id, { isFavorite: !coffee.isFavorite });
         return redirect(`/coffees/${coffee.id}`);
+      },
+      async addTasting(context) {
+        const coffee = getCoffee(context.params.id);
+        const json =
+          context.request.headers.get("content-type")?.split(";")[0] ===
+          "application/json";
+        let values: Record<string, string> = {};
+        try {
+          let input: unknown;
+          if (json) input = await context.request.json();
+          else {
+            const form = await boundedForm(context.request, 16384);
+            values = Object.fromEntries(
+              [...form.entries()].map(([k, v]) => [k, String(v)]),
+            );
+            input = tastingForm(form);
+          }
+          const updated = coffees.addTasting(coffee.id, input);
+          return json
+            ? Response.json(updated)
+            : redirect(`/coffees/${coffee.id}#tastings`);
+        } catch (error) {
+          if (error instanceof Response) throw error;
+          if (!(error instanceof z.ZodError) && !(error instanceof SyntaxError))
+            throw error;
+          const message =
+            error instanceof z.ZodError
+              ? error.issues
+                  .map((i) => `${i.path.join(".")}: ${i.message}`)
+                  .join("; ")
+              : "Invalid JSON";
+          return json
+            ? Response.json({ error: message }, { status: 400 })
+            : context.render(
+                <CoffeePage
+                  coffee={coffee}
+                  tastingError={message}
+                  tastingValues={values}
+                />,
+                { status: 400 },
+              );
+        }
+      },
+      deleteTasting({ params, request }) {
+        const coffee = getCoffee(params.id);
+        const index = Number(params.index);
+        if (
+          !/^\d+$/.test(params.index) ||
+          !Number.isSafeInteger(index) ||
+          !coffee.tastings?.[index]
+        )
+          throw new Response("Tasting not found", { status: 404 });
+        const updated = coffees.deleteTasting(coffee.id, index);
+        return request.headers.get("content-type")?.split(";")[0] ===
+          "application/json"
+          ? Response.json(updated)
+          : redirect(`/coffees/${coffee.id}#tastings`);
       },
       connect(context) {
         return context.render(

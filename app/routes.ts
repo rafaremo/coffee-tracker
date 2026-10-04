@@ -12,6 +12,8 @@ export const routes = route({
   confirmDelete: get("/coffees/:id/delete"),
   deleteCoffee: post("/coffees/:id/delete"),
   favorite: post("/coffees/:id/favorite"),
+  addTasting: post("/coffees/:id/tastings"),
+  deleteTasting: post("/coffees/:id/tastings/:index/delete"),
   connect: get("/connect"),
   revoke: post("/connect/revoke"),
   approvePage: get("/connect/:id"),

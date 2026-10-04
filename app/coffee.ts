@@ -7,6 +7,16 @@ const date = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
   .nullable()
   .optional();
+export const tastingSchema = z
+  .object({
+    date: z.iso.date(),
+    method: z.string().trim().min(1, "Enter a preparation method").max(200),
+    rating: z.number().min(0).max(10),
+    notes: z.string().trim().max(4000).optional(),
+  })
+  .strict();
+export type Tasting = z.infer<typeof tastingSchema>;
+
 export const coffeeSchema = z
   .object({
     name: z.string().trim().min(1, "Give your coffee a name").max(200),
@@ -33,6 +43,7 @@ export const coffeeSchema = z
     purchasePlace: text,
     tags: text,
     personalNotes: text,
+    tastings: z.array(tastingSchema).optional(),
     photoPath: z
       .string()
       .regex(/^\/uploads\/[a-f0-9-]+\.(jpg|png|webp|gif)$/)
@@ -130,6 +141,21 @@ export class Coffees {
     if (!this.get(id)) throw new Error("Coffee not found");
     this.store.db.prepare("DELETE FROM coffees WHERE id=?").run(id);
   }
+  addTasting(id: number, input: unknown) {
+    const tasting = tastingSchema.parse(input);
+    const coffee = this.get(id);
+    if (!coffee) throw new Error("Coffee not found");
+    return this.update(id, { tastings: [...(coffee.tastings ?? []), tasting] });
+  }
+  deleteTasting(id: number, index: number) {
+    z.number().int().nonnegative().parse(index);
+    const coffee = this.get(id);
+    if (!coffee) throw new Error("Coffee not found");
+    if (!coffee.tastings?.[index]) throw new Error("Tasting not found");
+    return this.update(id, {
+      tastings: coffee.tastings.filter((_, i) => i !== index),
+    });
+  }
   stats() {
     const all = this.store.db
       .prepare("SELECT * FROM coffees")
@@ -173,4 +199,14 @@ export function coffeeForm(form: FormData) {
     }
   }
   return coffeeSchema.parse(input);
+}
+
+export function tastingForm(form: FormData) {
+  const rating = String(form.get("rating") ?? "").trim();
+  return tastingSchema.parse({
+    date: form.get("date"),
+    method: form.get("method"),
+    rating: rating === "" ? undefined : Number(rating),
+    notes: form.has("notes") ? form.get("notes") : undefined,
+  });
 }

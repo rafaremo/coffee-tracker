@@ -50,3 +50,65 @@ test("coffee validation, search, patch semantics, persistence and migrations", (
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("tastings validate strictly, persist, and leave coffee-level notes and ratings intact", () => {
+  const dir = mkdtempSync(join(tmpdir(), "coffee-tastings-"));
+  let store = new Store(join(dir, "coffee.db"));
+  try {
+    const coffees = new Coffees(store);
+    const coffee = coffees.add({
+      name: "Daily coffee",
+      myRating: 7,
+      personalNotes: "My bag notes",
+    });
+    assert.equal(coffee.tastings, undefined);
+    const tasting = { date: "2026-10-04", method: "v60", rating: 0 };
+    for (const patch of [
+      { date: "2026-02-30" },
+      { date: "04-10-2026" },
+      { method: " " },
+      { rating: -1 },
+      { rating: 10.1 },
+      { rating: "8" },
+      { notes: null },
+      { unexpected: true },
+    ]) {
+      assert.throws(() =>
+        coffees.addTasting(coffee.id, { ...tasting, ...patch }),
+      );
+      assert.throws(() =>
+        coffees.update(coffee.id, { tastings: [{ ...tasting, ...patch }] }),
+      );
+    }
+    coffees.addTasting(coffee.id, tasting);
+    coffees.addTasting(coffee.id, {
+      ...tasting,
+      rating: 10,
+      notes: "With milk",
+    });
+    const form = new FormData();
+    form.set("name", "Renamed coffee");
+    form.set("myRating", "7");
+    form.set("personalNotes", "My bag notes");
+    const updated = coffees.update(coffee.id, coffeeForm(form));
+    assert.equal(updated.tastings?.length, 2);
+    assert.equal(updated.myRating, 7);
+    assert.equal(updated.personalNotes, "My bag notes");
+    assert.equal(coffees.stats().avgRating, 7);
+    assert.throws(() => coffees.deleteTasting(coffee.id, -1));
+    assert.throws(() => coffees.deleteTasting(coffee.id, 0.5));
+    assert.throws(() => coffees.deleteTasting(coffee.id, 2));
+    coffees.deleteTasting(coffee.id, 0);
+    store.close();
+    store = new Store(join(dir, "coffee.db"));
+    const persisted = new Coffees(store).get(coffee.id)!;
+    assert.deepEqual(persisted.tastings, [
+      { ...tasting, rating: 10, notes: "With milk" },
+    ]);
+    assert.equal(persisted.myRating, 7);
+    assert.equal(persisted.personalNotes, "My bag notes");
+  } finally {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

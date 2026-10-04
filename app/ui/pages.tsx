@@ -268,6 +268,9 @@ function CoffeeCard(handle: Handle<{ coffee: Coffee }>) {
             ))}
           </div>
           {c.tastingNotes && <p className="tasting">{c.tastingNotes}</p>}
+          {!!c.tastings?.length && (
+            <p className="muted small">{c.tastings.length} tastings</p>
+          )}
         </div>
       </a>
     );
@@ -469,10 +472,27 @@ export function CoffeeFormPage(handle: Handle<FormProps>) {
   };
 }
 export function CoffeePage(
-  handle: Handle<{ coffee: Coffee; deleting?: boolean }>,
+  handle: Handle<{
+    coffee: Coffee;
+    deleting?: boolean;
+    tastingError?: string;
+    tastingValues?: Record<string, string>;
+  }>,
 ) {
   return () => {
     const c = handle.props.coffee;
+    const tastings = (c.tastings ?? [])
+      .map((tasting, index) => ({ ...tasting, index }))
+      .sort((a, b) => b.date.localeCompare(a.date) || b.index - a.index);
+    const average = tastings.length
+      ? (
+          tastings.reduce((sum, tasting) => sum + tasting.rating, 0) /
+          tastings.length
+        ).toFixed(1)
+      : "—";
+    const values = handle.props.tastingValues ?? {};
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     return (
       <Page title={c.name} active="collection">
         <a className="back" href="/">
@@ -499,6 +519,17 @@ export function CoffeePage(
               <div>
                 <span className="eyebrow">{c.brand || "YOUR COLLECTION"}</span>
                 <h1>{c.name}</h1>
+                <div
+                  className="tags tasting-summary"
+                  aria-label="Coffee and tasting ratings"
+                >
+                  <span>My rating: {c.myRating ?? "—"} / 10</span>
+                  <span>{tastings.length} tastings</span>
+                  <span>Tasting average: {average} / 10</span>
+                  {tastings[0] && (
+                    <span>Latest tasting: {tastings[0].rating} / 10</span>
+                  )}
+                </div>
                 <p className="muted">
                   {[c.country, c.region].filter(Boolean).join(" · ")}
                 </p>
@@ -539,6 +570,103 @@ export function CoffeePage(
                 </div>
               </aside>
               <div className="detail-sections">
+                <section className="panel" id="tastings">
+                  <h2>
+                    Tasting log <span className="count">{tastings.length}</span>
+                  </h2>
+                  {tastings.length ? (
+                    <ol className="tasting-list">
+                      {tastings.map((tasting) => (
+                        <li key={tasting.index}>
+                          <div className="tasting-row">
+                            <div>
+                              <time dateTime={tasting.date}>
+                                {tasting.date}
+                              </time>
+                              <p className="notes">{tasting.method}</p>
+                            </div>
+                            <span className="rating tasting-rating">
+                              ★ {tasting.rating} / 10
+                            </span>
+                            <form
+                              method="post"
+                              action={`/coffees/${c.id}/tastings/${tasting.index}/delete`}
+                            >
+                              <button
+                                className="button secondary"
+                                aria-label={`Delete tasting: ${tasting.date}, ${tasting.method}`}
+                              >
+                                Delete
+                              </button>
+                            </form>
+                          </div>
+                          {tasting.notes && (
+                            <p className="notes small">{tasting.notes}</p>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p className="muted">
+                      No tastings yet. Record your first cup below.
+                    </p>
+                  )}
+                  <h3>Add a tasting</h3>
+                  {handle.props.tastingError && (
+                    <p role="alert" className="error">
+                      {handle.props.tastingError}
+                    </p>
+                  )}
+                  <form method="post" action={`/coffees/${c.id}/tastings`}>
+                    <div className="form-grid">
+                      <label>
+                        Date
+                        <input
+                          type="date"
+                          name="date"
+                          required
+                          defaultValue={values.date ?? today}
+                        />
+                      </label>
+                      <label>
+                        Preparation method
+                        <input
+                          type="text"
+                          name="method"
+                          required
+                          maxLength={200}
+                          placeholder="Espresso, v60, french press…"
+                          defaultValue={values.method ?? ""}
+                        />
+                      </label>
+                      <label>
+                        Rating (0–10)
+                        <input
+                          type="number"
+                          name="rating"
+                          required
+                          min={0}
+                          max={10}
+                          step="any"
+                          defaultValue={values.rating ?? ""}
+                        />
+                      </label>
+                      <label>
+                        Notes (optional)
+                        <textarea
+                          name="notes"
+                          rows={3}
+                          maxLength={4000}
+                          placeholder="After breakfast, with milk, tastes better today…"
+                          defaultValue={values.notes ?? ""}
+                        />
+                      </label>
+                    </div>
+                    <div className="form-actions">
+                      <button className="button">Add tasting</button>
+                    </div>
+                  </form>
+                </section>
                 {c.personalNotes && (
                   <section className="panel">
                     <h2>Personal notes</h2>

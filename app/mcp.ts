@@ -5,6 +5,7 @@ import {
   coffeeSchema,
   coffeePatchSchema,
   listSchema,
+  tastingSchema,
 } from "./coffee.ts";
 
 export function createCoffeeMcp(coffees: Coffees) {
@@ -72,7 +73,7 @@ export function createCoffeeMcp(coffees: Coffees) {
     {
       title: "Update coffee",
       description:
-        "Change supplied fields only. Use null to clear optional fields.",
+        "Change supplied fields only. Use null to clear nullable fields. Tastings replaces the whole history; use [] to clear it, or add_tasting/delete_tasting for individual entries.",
       inputSchema: coffeePatchSchema.extend({
         id: z.number().int().positive(),
       }),
@@ -80,6 +81,35 @@ export function createCoffeeMcp(coffees: Coffees) {
       _meta: security,
     },
     ({ id, ...patch }) => result(coffees.update(id, patch)),
+  );
+  server.registerTool(
+    "add_tasting",
+    {
+      title: "Add tasting",
+      description:
+        "Record one brew with date (YYYY-MM-DD), preparation method, rating 0–10, and optional context notes.",
+      inputSchema: tastingSchema.extend({ id: z.number().int().positive() }),
+      annotations: write,
+      _meta: security,
+    },
+    ({ id, ...tasting }) => result(coffees.addTasting(id, tasting)),
+  );
+  server.registerTool(
+    "delete_tasting",
+    {
+      title: "Delete tasting",
+      description:
+        "Delete a tasting using its zero-based index in the stored tastings array returned by get_coffee. Fetch the current coffee before deleting.",
+      inputSchema: z
+        .object({
+          id: z.number().int().positive(),
+          index: z.number().int().nonnegative(),
+        })
+        .strict(),
+      annotations: { ...write, destructiveHint: true },
+      _meta: security,
+    },
+    ({ id, index }) => result(coffees.deleteTasting(id, index)),
   );
   server.registerTool(
     "delete_coffee",
