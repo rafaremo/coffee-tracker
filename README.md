@@ -68,6 +68,10 @@ Use one app replica and retain the `coffee-data` volume at `/app/data`. The imag
 runs as the standard Node user (UID 1000); an existing bind mount must be writable
 by that user. `/health` checks database availability. The migrations run before
 the HTTP listener starts and are checksum-verified on subsequent starts.
+Migration `002_backfill_tastings.sql` seeds one tasting for existing rated coffees
+without a tasting log, using the creation date and up to 200 characters of brewing
+methods (or `Registro inicial`). Existing tasting arrays, including empty ones,
+are preserved; notes are not copied.
 
 This is the fresh-app Remix 3 replacement. It uses `coffee.db`; legacy `prod.db`
 or `prisma/data/*.db` files are not imported or modified. The old `DATABASE_URL`,
